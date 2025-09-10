@@ -5,6 +5,7 @@ from mediapipe.framework.formats import landmark_pb2
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
+from config import BS_CN
 import cv2
 rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS']  # 支持中文的字体
 rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
@@ -125,34 +126,3 @@ def plot_face_blendshapes_bar_graph(face_blendshapes):
     # 7. 自动调整布局并显示
     plt.tight_layout()
     plt.show()
-    
-    
-    
-    
-# ========== 52 维 BlendShape → 中文动作对照表 ==========
-BS_CN = {
-    "browDownLeft": "左眉下降", "browDownRight": "右眉下降",
-    "browInnerUp": "眉心上升", "browOuterUpLeft": "左眉尾上升", "browOuterUpRight": "右眉尾上升",
-    "cheekPuff": "鼓腮", "cheekSquintLeft": "左颊眯紧", "cheekSquintRight": "右颊眯紧",
-    "eyeBlinkLeft": "左眼眨", "eyeBlinkRight": "右眼眨",
-    "eyeLookDownLeft": "左眼向下", "eyeLookDownRight": "右眼向下",
-    "eyeLookInLeft": "左眼内收", "eyeLookInRight": "右眼内收",
-    "eyeLookOutLeft": "左眼外展", "eyeLookOutRight": "右眼外展",
-    "eyeLookUpLeft": "左眼向上", "eyeLookUpRight": "右眼向上",
-    "eyeSquintLeft": "左眼眯紧", "eyeSquintRight": "右眼眯紧",
-    "eyeWideLeft": "左眼瞪大", "eyeWideRight": "右眼瞪大",
-    "jawForward": "下颌前伸", "jawLeft": "下颌左偏", "jawRight": "下颌右偏",
-    "jawOpen": "张口", "mouthClose": "闭口", "mouthFrownLeft": "左嘴角下垂",
-    "mouthFrownRight": "右嘴角下垂", "mouthFunnel": "噘嘴圆孔", "mouthPucker": "噘嘴",
-    "mouthLeft": "嘴向左", "mouthRight": "嘴向右",
-    "mouthSmileLeft": "左嘴角上扬", "mouthSmileRight": "右嘴角上扬",
-    "mouthDimpleLeft": "左酒窝", "mouthDimpleRight": "右酒窝",
-    "mouthStretchLeft": "左嘴角拉伸", "mouthStretchRight": "右嘴角拉伸",
-    "mouthRollLower": "下唇卷", "mouthRollUpper": "上唇卷",
-    "mouthShrugLower": "下唇耸", "mouthShrugUpper": "上唇耸",
-    "mouthPressLeft": "左唇压紧", "mouthPressRight": "右唇压紧",
-    "mouthLowerDownLeft": "左下唇下降", "mouthLowerDownRight": "右下唇下降",
-    "mouthUpperUpLeft": "左上唇上升", "mouthUpperUpRight": "右上唇上升",
-    "noseSneerLeft": "左鼻皱", "noseSneerRight": "右鼻皱",
-    "tongueOut": "吐舌"
-}

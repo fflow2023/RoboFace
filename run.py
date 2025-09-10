@@ -1,148 +1,235 @@
-#run.py
-# STEP 1: Import the necessary modules.
+# run.py - 主程序
+import sys, cv2, time, os
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
-from vs import *
-import cv2
+from vs import draw_landmarks_on_image, plot_face_blendshapes_bar_graph
+from config import *
+from tools import *
 
-# 灵敏度设置字典
-SENSITIVITY = {
-    "eye_up": 1.0,    # 眼球向上灵敏度
-    "eye_down": 1.0,  # 眼球向下灵敏度
-    "eye_left": 1.0,  # 眼球向左灵敏度
-    "eye_right": 1.0, # 眼球向右灵敏度
-}
+def blendshapes_to_dict(blendshapes):
+    """把 FaceLandmarker 返回的 list 转成 dict"""
+    return {b.category_name: b.score for b in blendshapes}
 
-# STEP 2: Create an FaceLandmarker object.
-base_options = python.BaseOptions(model_asset_path='face_landmarker_v2_with_blendshapes.task')
-options = vision.FaceLandmarkerOptions(base_options=base_options,
-                                       output_face_blendshapes=True,
-                                       output_facial_transformation_matrixes=True,
-                                       num_faces=1)
-detector = vision.FaceLandmarker.create_from_options(options)
-
-# STEP 3: Load the input image.
+# ------------------ 构造检测器 ------------------
 try:
-    image = mp.Image.create_from_file("tests/xieshi.jpg")
-    print("图像加载成功")
+    base_options = python.BaseOptions(model_asset_path=MODEL_PATH)
+    options = vision.FaceLandmarkerOptions(
+        base_options=base_options,
+        output_face_blendshapes=True,
+        output_facial_transformation_matrixes=True,
+        num_faces=1)
+    detector = vision.FaceLandmarker.create_from_options(options)
 except Exception as e:
-    print(f"图像加载失败: {e}")
-    exit(1)
+    print(f"创建检测器失败: {str(e)}")
+    sys.exit(1)
 
-# STEP 4: Detect face landmarks from the input image.
-detection_result = detector.detect(image)
-
-if not detection_result.face_landmarks:
-    print("未检测到人脸")
-    exit(1)
-print("检测到人脸")
-
-# STEP 5: 可视化结果
-# annotated_image = draw_landmarks_on_image(image.numpy_view(), detection_result)
-# display_image_with_matplotlib(annotated_image,"Face Landmarks")
-plot_face_blendshapes_bar_graph(detection_result.face_blendshapes[0])
-
-# 打印所有blendshapes
-print("\n所有BlendShape值:")
-for i, blend in enumerate(detection_result.face_blendshapes[0]):
-    print(f"{i+1}. {blend.category_name}: {blend.score:.6f}")
+# ------------------ 模式1：静态图片 ------------------
+def mode_static(img_path):
+    if not os.path.exists(img_path):
+        print(f"错误: 图片路径不存在 - {img_path}")
+        return
     
-# ========== 眼球上下移动检测 ==========
-# 提取四个关键的眼睛动作强度值
-eye_look_down_left = None
-eye_look_down_right = None
-eye_look_up_left = None
-eye_look_up_right = None
+    print(f'[Mode1] 读取静态图片: {img_path}')
+    try:
+        image = mp.Image.create_from_file(img_path)
+    except Exception as e:
+        print(f"读取图片失败: {str(e)}")
+        return
+    
+    result = detector.detect(image)
+    if not result.face_landmarks:
+        print('未检测到人脸')
+        return
+    
+    # 初始化socket连接
+    init_socket_connection()
+    
+    try:
+        # 可视化
+        annotated = draw_landmarks_on_image(image.numpy_view(), result)
+        
+        # 处理blendshapes并控制舵机
+        if result.face_blendshapes:
+            bs_dict = blendshapes_to_dict(result.face_blendshapes[0])
+            commands = process_all_servos(bs_dict)
+            send_servo_commands(commands)
+            
+            # 显示blendshapes图表
+            plot_face_blendshapes_bar_graph(result.face_blendshapes[0])
+        
+        cv2.imshow('Static Result', cv2.cvtColor(annotated, cv2.COLOR_RGB2BGR))
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+    except Exception as e:
+        print(f"处理过程中出错: {str(e)}")
+    finally:
+        # 确保关闭连接
+        close_socket_connection()
 
-# 遍历所有blendshapes
-for blend in detection_result.face_blendshapes[0]:
-    if blend.category_name == "eyeLookDownLeft":
-        eye_look_down_left = blend.score
-    elif blend.category_name == "eyeLookDownRight":
-        eye_look_down_right = blend.score
-    elif blend.category_name == "eyeLookUpLeft":
-        eye_look_up_left = blend.score
-    elif blend.category_name == "eyeLookUpRight":
-        eye_look_up_right = blend.score
+# ------------------ 模式2：24 FPS 实时摄像头 ------------------
+def mode_camera():
+    print(f'[Mode2] 打开摄像头，{FPS} FPS 实时推理（按 q 退出）')
+    # 初始化socket连接
+    init_socket_connection()
+    try:
+        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            print('错误: 摄像头打开失败，请检查设备连接')
+            return
 
-# 检查是否所有值都已提取
-if None in [eye_look_down_left, eye_look_down_right, eye_look_up_left, eye_look_up_right]:
-    print("警告：未能提取所有眼睛动作的强度值")
-    # 处理缺失值的情况（这里简单设为0）
-    eye_look_down_left = eye_look_down_left or 0
-    eye_look_down_right = eye_look_down_right or 0
-    eye_look_up_left = eye_look_up_left or 0
-    eye_look_up_right = eye_look_up_right or 0
+        # 控制帧率
+        interval = 1/FPS
+        t_last = 0
 
-# 计算双眼的最大值
-down_strength = max(eye_look_down_left, eye_look_down_right)
-up_strength = max(eye_look_up_left, eye_look_up_right)
+        while True:
+            ret, frame_bgr = cap.read()
+            if not ret:
+                print("错误: 无法从摄像头读取帧")
+                break
+            # 限帧
+            t = time.time()
+            if t - t_last < interval:
+                continue
+            t_last = t
 
-# 判断眼睛方向
-if up_strength > down_strength:
-    direction = "向上"
-    # 映射到0-49.5度范围
-    angle_vertical = up_strength * 49.5 * SENSITIVITY["eye_up"]
-else:
-    direction = "向下"
-    # 映射到0到-22.5度范围
-    angle_vertical = -down_strength * 22.5 * SENSITIVITY["eye_down"]
+            # BGR→RGB→MediaPipe Image
+            rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+            result = detector.detect(mp_image)
 
-# 输出垂直方向结果
-print(f"\n垂直方向:")
-print(f"眼睛方向: {direction}")
-print(f"向上强度: {up_strength:.6f}, 向下强度: {down_strength:.6f}")
-print(f"映射角度: {angle_vertical:.2f}度")
+            # 画关键点
+            annotated = draw_landmarks_on_image(rgb, result)
+            
+            # 处理blendshapes并控制舵机
+            if result.face_blendshapes:
+                bs_dict = blendshapes_to_dict(result.face_blendshapes[0])
+                commands = process_all_servos(bs_dict)
+                send_servo_commands(commands)
+            
+            cv2.imshow(WIN_NAME, cv2.cvtColor(annotated, cv2.COLOR_RGB2BGR))
 
-# ========== 眼球左右移动检测 ==========
-# 提取四个关键的眼睛动作强度值
-eye_look_in_left = None
-eye_look_in_right = None
-eye_look_out_left = None
-eye_look_out_right = None
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
 
-# 遍历所有blendshapes
-for blend in detection_result.face_blendshapes[0]:
-    if blend.category_name == "eyeLookInLeft":
-        eye_look_in_left = blend.score
-    elif blend.category_name == "eyeLookInRight":
-        eye_look_in_right = blend.score
-    elif blend.category_name == "eyeLookOutLeft":
-        eye_look_out_left = blend.score
-    elif blend.category_name == "eyeLookOutRight":
-        eye_look_out_right = blend.score
+        cap.release()
+        cv2.destroyAllWindows()
+    except Exception as e:
+        print(f"摄像头处理过程中出错: {str(e)}")
+    finally:
+        # 确保关闭连接
+        close_socket_connection()
 
-# 检查是否所有值都已提取
-if None in [eye_look_in_left, eye_look_in_right, eye_look_out_left, eye_look_out_right]:
-    print("警告：未能提取所有眼睛动作的强度值")
-    # 处理缺失值的情况（这里简单设为0）
-    eye_look_in_left = eye_look_in_left or 0
-    eye_look_in_right = eye_look_in_right or 0
-    eye_look_out_left = eye_look_out_left or 0
-    eye_look_out_right = eye_look_out_right or 0
+# ------------------ 模式3：视频文件处理 ------------------
+def mode_video(video_path):
+    if not os.path.exists(video_path):
+        print(f"错误: 视频路径不存在 - {video_path}")
+        return
+    
+    print(f'[Mode3] 处理视频文件: {video_path} (按 q 退出)')
+    
+    # 初始化socket连接
+    init_socket_connection()
+    
+    try:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print(f'错误: 无法打开视频文件: {video_path}')
+            print('可能原因: 文件格式不支持、文件损坏或编解码器缺失')
+            return
+        
+        # 获取视频原始帧率
+        original_fps = cap.get(cv2.CAP_PROP_FPS)
+        print(f'视频原始帧率: {original_fps:.2f} FPS')
+        print(f'目标处理帧率: {FPS} FPS')
+        
+        # 计算每帧应该显示的时间（秒）
+        frame_delay = 1 / FPS
+        
+        frame_count = 0
+        start_time = time.time()
+        
+        while True:
+            # 记录帧开始时间
+            frame_start = time.time()
+            
+            ret, frame_bgr = cap.read()
+            if not ret:
+                print("\n视频处理完成")
+                break
+            
+            # BGR→RGB→MediaPipe Image
+            rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+            result = detector.detect(mp_image)
+            
+            # 画关键点
+            annotated = draw_landmarks_on_image(rgb, result)
+            
+            # 处理blendshapes并控制舵机
+            if result.face_blendshapes:
+                bs_dict = blendshapes_to_dict(result.face_blendshapes[0])
+                commands = process_all_servos(bs_dict)
+                send_servo_commands(commands)
+            
+            # 显示处理后的帧
+            cv2.imshow(WIN_NAME, cv2.cvtColor(annotated, cv2.COLOR_RGB2BGR))
+            
+            # 计算处理时间并调整显示延迟
+            processing_time = time.time() - frame_start
+            remaining_time = max(0.001, frame_delay - processing_time)  # 至少1ms
+            
+            # 等待剩余时间或用户输入
+            if cv2.waitKey(int(remaining_time * 1000)) & 0xFF == ord('q'):
+                print("\n用户中断处理")
+                break
+            
+            frame_count += 1
+        
+        # 计算实际处理帧率
+        end_time = time.time()
+        total_time = end_time - start_time
+        actual_fps = frame_count / total_time if total_time > 0 else 0
+        print(f'\n实际处理帧率: {actual_fps:.2f} FPS')
+        print(f'总处理帧数: {frame_count}')
+        print(f'总耗时: {total_time:.2f} 秒')
+        
+        cap.release()
+        cv2.destroyAllWindows()
+    except Exception as e:
+        print(f"视频处理过程中出错: {str(e)}")
+    finally:
+        # 确保关闭连接
+        close_socket_connection()
 
-# 计算双眼的最大值
-left_strength = max(eye_look_out_left, eye_look_in_right)  # 左眼外展或右眼内收表示向左看
-right_strength = max(eye_look_out_right, eye_look_in_left)  # 右眼外展或左眼内收表示向右看
-
-# 判断眼睛方向
-if left_strength > right_strength:
-    direction = "向左"
-    # 映射到0-36度范围（左正）
-    angle_horizontal = left_strength * 36 * SENSITIVITY["eye_left"]
-else:
-    direction = "向右"
-    # 映射到0到-36度范围（右负）
-    angle_horizontal = -right_strength * 36 * SENSITIVITY["eye_right"]
-
-# 输出水平方向结果
-print(f"\n水平方向:")
-print(f"眼睛方向: {direction}")
-print(f"向左强度: {left_strength:.6f}, 向右强度: {right_strength:.6f}")
-print(f"映射角度: {angle_horizontal:.2f}度")
-
-# ========== 综合输出 ==========
-print(f"\n综合眼球位置:")
-print(f"垂直角度: {angle_vertical:.2f}度")
-print(f"水平角度: {angle_horizontal:.2f}度")
+# ------------------ main ------------------
+if __name__ == '__main__':
+    # 设置默认路径
+    img_path = DEFAULT_IMG_PATH
+    video_path = DEFAULT_VIDEO_PATH
+    
+    if len(sys.argv) < 2:
+        print('Usage:')
+        print('  python run.py 1 [image_path]   # 静态图模式 ')
+        print('  python run.py 2                # 实时摄像头模式')
+        print('  python run.py 3 [video_path]   # 视频文件模式 ')
+        sys.exit(1)
+    
+    mode = sys.argv[1]
+    
+    if mode == '1':
+        # 如果有指定图片路径，则使用它
+        if len(sys.argv) >= 3:
+            img_path = sys.argv[2]
+        mode_static(img_path)
+    elif mode == '2':
+        mode_camera()
+    elif mode == '3':
+        # 如果有指定视频路径，则使用它
+        if len(sys.argv) >= 3:
+            video_path = sys.argv[2]
+        mode_video(video_path)
+    else:
+        print('错误: 无效的模式选择')
+        print('可用模式: 1 (静态图), 2 (摄像头), 3 (视频文件)')
+        sys.exit(1)
