@@ -11,7 +11,7 @@ client_socket = None
 intervaltime = int(1/FPS * 1000)
 
 # 调试模式开关
-DEBUG_MODE = False  # 设置为True启用详细调试信息
+DEBUG_MODE = True  # 设置为True启用详细调试信息
 
 # 用于存储上次舵机角度值，用于检测变化
 last_servo_angles = {}
@@ -79,9 +79,9 @@ def debug_servo_angle(servo_id, angle):
 # 舵机控制函数
 def control_servo_1(bs):
     """左下眼皮控制"""
-    value = bs.get("eyeBlinkLeft", 0) * SENSITIVITY["eyelid_left_close"]
+    value = max(0,0.5-bs.get("eyeBlinkLeft", 0)) * SENSITIVITY["eyelid_left_close"]
     min_angle, max_angle = servo_ranges[1]
-    angle = map_value(value, 0, 1, min_angle, max_angle)
+    angle = map_value(value, 0, 0.5, min_angle, max_angle)
     if DEBUG_MODE: debug_servo_angle(1, angle)
     return f"1,{int(angle)},{intervaltime}"
 
@@ -118,10 +118,23 @@ def control_servo_5(bs):
     return f"5,{int(angle)},{intervaltime}"
 
 def control_servo_6(bs):
-    """左嘴控制"""
-    value = (bs.get("mouthSmileLeft", 0) + bs.get("mouthStretchLeft", 0)) / 2 * SENSITIVITY["mouth_left_smile"]
-    min_angle, max_angle = servo_ranges[6]
-    angle = map_value(value, 0, 1, min_angle, max_angle)
+    """左嘴控制 - 使用jawOpen数据"""
+    # 获取jawOpen值，范围0.0-1.0
+    jaw_open = bs.get("jawOpen", 0)
+    
+    # 将jawOpen值映射到舵机角度
+    # 当jawOpen=0.01时，角度=0度；当jawOpen=0.8时，角度=58度
+    min_jaw = 0.01
+    max_jaw = 0.8
+    min_angle = 0
+    max_angle = 58
+    
+    # 确保jawOpen在有效范围内
+    jaw_open = max(min(jaw_open, max_jaw), min_jaw)
+    
+    # 线性映射
+    angle = min_angle + (jaw_open - min_jaw) * (max_angle - min_angle) / (max_jaw - min_jaw)
+    
     if DEBUG_MODE: debug_servo_angle(6, angle)
     return f"6,{int(angle)},{intervaltime}"
 
@@ -192,35 +205,53 @@ def control_servo_12(bs):
     return f"12,{int(angle)},{intervaltime}"
 
 def control_servo_13(bs):
-    """右嘴控制（与左嘴对称）"""
-    # 与舵机6保持相同角度
-    value = (bs.get("mouthSmileRight", 0) + bs.get("mouthStretchRight", 0)) / 2 * SENSITIVITY["mouth_right_smile"]
-    min_angle, max_angle = servo_ranges[13]
-    angle = map_value(value, 0, 1, min_angle, max_angle)
+    """右嘴控制 - 使用jawOpen数据"""
+    # 获取jawOpen值，范围0.0-1.0
+    jaw_open = bs.get("jawOpen", 0)
+    # 将jawOpen值映射到舵机角度
+    min_jaw = 0.01
+    max_jaw = 0.8
+    min_angle = 0
+    max_angle = 58
+    # 确保jawOpen在有效范围内
+    jaw_open = max(min(jaw_open, max_jaw), min_jaw)
+    
+    # 线性映射
+    angle = min_angle + (jaw_open - min_jaw) * (max_angle - min_angle) / (max_jaw - min_jaw)
+    
     if DEBUG_MODE: debug_servo_angle(13, angle)
     return f"13,{int(angle)},{intervaltime}"
 
 def control_servo_14(bs):
     """左上眼皮控制"""
-    value = bs.get("eyeBlinkLeft", 0) * SENSITIVITY["eyelid_left_close"]
+    # value = (1.0-bs.get("eyeBlinkLeft", 0)) * SENSITIVITY["eyelid_left_close"]
+    # min_angle, max_angle = servo_ranges[14]
+    # angle = map_value(value, 0, 1, min_angle, max_angle)
+    value = max(0,0.5-bs.get("eyeBlinkLeft", 0)) * SENSITIVITY["eyelid_left_close"]
     min_angle, max_angle = servo_ranges[14]
-    angle = map_value(value, 0, 1, min_angle, max_angle)
+    angle = map_value(value, 0, 0.5, min_angle, max_angle)
     if DEBUG_MODE: debug_servo_angle(14, angle)
     return f"14,{int(angle)},{intervaltime}"
 
 def control_servo_15(bs):
     """右上眼皮控制"""
-    value = bs.get("eyeBlinkRight", 0) * SENSITIVITY["eyelid_right_close"]
+    # value = (1.0-bs.get("eyeBlinkRight", 0)) * SENSITIVITY["eyelid_right_close"]
+    # min_angle, max_angle = servo_ranges[15]
+    # angle = map_value(value, 0, 1, min_angle, max_angle)
+    value = max(0,0.5-bs.get("eyeBlinkRight", 0)) * SENSITIVITY["eyelid_right_close"]
     min_angle, max_angle = servo_ranges[15]
-    angle = map_value(value, 0, 1, min_angle, max_angle)
+    angle = map_value(value, 0, 0.5, min_angle, max_angle)
     if DEBUG_MODE: debug_servo_angle(15, angle)
     return f"15,{int(angle)},{intervaltime}"
 
 def control_servo_16(bs):
     """右下眼皮控制"""
-    value = bs.get("eyeBlinkRight", 0) * SENSITIVITY["eyelid_right_close"]
+    # value = (1.0-bs.get("eyeBlinkRight", 0)) * SENSITIVITY["eyelid_right_close"]
+    # min_angle, max_angle = servo_ranges[16]
+    # angle = map_value(value, 0, 1, min_angle, max_angle)
+    value = max(0,0.5-bs.get("eyeBlinkRight", 0)) * SENSITIVITY["eyelid_right_close"]
     min_angle, max_angle = servo_ranges[16]
-    angle = map_value(value, 0, 1, min_angle, max_angle)
+    angle = map_value(value, 0, 0.5, min_angle, max_angle)
     if DEBUG_MODE: debug_servo_angle(16, angle)
     return f"16,{int(angle)},{intervaltime}"
 
@@ -270,7 +301,8 @@ def process_all_servos(blendshapes_dict):
         print("="*80)
     
     # 调用每个舵机的控制函数
-    for servo_id in range(1, 21):
+    # for servo_id in range(1, 21): 
+    for servo_id in [1 ,6,11,12,13,14, 15, 16,0]:
         try:
             # 获取舵机控制函数
             control_func = globals().get(f"control_servo_{servo_id}")
@@ -281,16 +313,17 @@ def process_all_servos(blendshapes_dict):
         except Exception as e:
             print(f" | 舵机{servo_id}控制出错: {e}")
     
-    # 打印眼球位置信息
-    eye_v_cmd = next((c for c in commands if c.startswith("12,")), None)
-    eye_h_cmd = next((c for c in commands if c.startswith("11,")), None)
-    if eye_v_cmd and eye_h_cmd:
-        v_angle = eye_v_cmd.split(",")[1]
-        h_angle = eye_h_cmd.split(",")[1]
-        print(f"\r眼球垂直: {v_angle}° | 水平: {h_angle}°    ", end='', flush=True)
+    # # 打印眼球位置信息
+    # eye_v_cmd = next((c for c in commands if c.startswith("12,")), None)
+    # eye_h_cmd = next((c for c in commands if c.startswith("11,")), None)
+    # if eye_v_cmd and eye_h_cmd:
+    #     v_angle = eye_v_cmd.split(",")[1]
+    #     h_angle = eye_h_cmd.split(",")[1]
+    #     print(f"\r眼球垂直: {v_angle}° | 水平: {h_angle}°    ", end='', flush=True)
     
     # 打印分隔线
     if DEBUG_MODE:
+        print('\n')
         print("="*80)
     
     return commands
