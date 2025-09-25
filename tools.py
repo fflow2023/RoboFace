@@ -11,10 +11,13 @@ client_socket = None
 intervaltime = int(1/FPS * 1000)
 
 # 调试模式开关
-DEBUG_MODE = True  # 设置为True启用详细调试信息
+DEBUG_MODE = False  # 设置为True启用详细调试信息
 
 # 用于存储上次舵机角度值，用于检测变化
 last_servo_angles = {}
+
+# 用于平滑的全局变量：存储每个BlendShape的上一次平滑值
+blendshapes_smoothed = {}
 
 def init_socket_connection():
     """初始化socket连接"""
@@ -43,8 +46,8 @@ def send_servo_commands(commands):
     
     try:
         command_str = " ".join(commands)  # 添加换行符
-        if DEBUG_MODE:
-            print(f"  | 已发送命令: {command_str}", end='', flush=True)
+        # if DEBUG_MODE:
+        print(f"\r  | 已发送命令: {command_str}    ", end='', flush=True)
         command_str += "\n"  # 添加换行符
         client_socket.send(command_str.encode())
     except Exception as e:
@@ -76,6 +79,23 @@ def debug_servo_angle(servo_id, angle):
         print(f"\n舵机 {servo_id:2d}: {angle:6.1f}°", end='', flush=True)
         last_servo_angles[servo_id] = angle
 
+def smooth_blendshapes(blendshapes_dict):
+    """
+    对BlendShape值进行指数平滑
+    """
+    global blendshapes_smoothed
+    smoothed_dict = {}
+    for name, value in blendshapes_dict.items():
+        if name in blendshapes_smoothed:
+            # 指数平滑公式: smoothed_value = alpha * current + (1 - alpha) * previous
+            smoothed_value = SMOOTHING_ALPHA * value + (1 - SMOOTHING_ALPHA) * blendshapes_smoothed[name]
+        else:
+            smoothed_value = value
+        blendshapes_smoothed[name] = smoothed_value
+        smoothed_dict[name] = smoothed_value
+    return smoothed_dict
+
+
 # 舵机控制函数
 def control_servo_1(bs):
     """左下眼皮控制"""
@@ -86,20 +106,22 @@ def control_servo_1(bs):
     return f"1,{int(angle)},{intervaltime}"
 
 def control_servo_2(bs):
-    """牙后左上控制"""
-    value = bs.get("jawOpen", 0) * SENSITIVITY["jaw_open"]
+    """牙后左上控制（脸皮上下）"""
+    value = bs.get("cheekSquintLeft", 0) * SENSITIVITY["cheek_left_up"]
     min_angle, max_angle = servo_ranges[2]
     angle = map_value(value, 0, 1, min_angle, max_angle)
     if DEBUG_MODE: debug_servo_angle(2, angle)
     return f"2,{int(angle)},{intervaltime}"
 
 def control_servo_3(bs):
-    """牙后左下控制"""
-    value = bs.get("jawOpen", 0) * SENSITIVITY["jaw_open"]
+    """牙后左下控制（脸皮前后）"""
+    # 使用嘴巴拉伸动作控制脸皮前后
+    value = bs.get("mouthStretchLeft", 0) * SENSITIVITY["cheek_left_forward"]  # 暂时使用jaw_open灵敏度
     min_angle, max_angle = servo_ranges[3]
     angle = map_value(value, 0, 1, min_angle, max_angle)
     if DEBUG_MODE: debug_servo_angle(3, angle)
     return f"3,{int(angle)},{intervaltime}"
+
 
 def control_servo_4(bs):
     """下颚颚左控制"""
@@ -139,20 +161,22 @@ def control_servo_6(bs):
     return f"6,{int(angle)},{intervaltime}"
 
 def control_servo_7(bs):
-    """右后牙上控制"""
-    value = bs.get("jawOpen", 0) * SENSITIVITY["jaw_open"]
+    """右后牙上控制（脸皮上下）"""
+    value = bs.get("cheekSquintRight", 0) * SENSITIVITY["cheek_right_up"]
     min_angle, max_angle = servo_ranges[7]
     angle = map_value(value, 0, 1, min_angle, max_angle)
     if DEBUG_MODE: debug_servo_angle(7, angle)
     return f"7,{int(angle)},{intervaltime}"
 
 def control_servo_8(bs):
-    """右后牙下控制"""
-    value = bs.get("jawOpen", 0) * SENSITIVITY["jaw_open"]
+    """右后牙下控制（脸皮前后）"""
+    # 使用嘴巴拉伸动作控制脸皮前后
+    value = bs.get("mouthStretchRight", 0) * SENSITIVITY["cheek_right_forward"] 
     min_angle, max_angle = servo_ranges[8]
     angle = map_value(value, 0, 1, min_angle, max_angle)
     if DEBUG_MODE: debug_servo_angle(8, angle)
     return f"8,{int(angle)},{intervaltime}"
+
 
 def control_servo_9(bs):
     """下颚颚右控制"""
@@ -256,34 +280,42 @@ def control_servo_16(bs):
     return f"16,{int(angle)},{intervaltime}"
 
 def control_servo_17(bs):
-    """右眉头控制"""
+    """右眉头控制 - 对应browDownRight(右眉头下降)"""
+    # 右眉头下降，舵机角度应向负方向运动
     value = bs.get("browDownRight", 0) * SENSITIVITY["eyebrow_right_down"]
     min_angle, max_angle = servo_ranges[17]
-    angle = map_value(value, 0, 1, min_angle, max_angle)
+    # 注意：正上负下，所以眉头下降应映射到负角度
+    angle = map_value(value, 0, 1, 0, min_angle)  # 从0到min_angle(负值)
     if DEBUG_MODE: debug_servo_angle(17, angle)
     return f"17,{int(angle)},{intervaltime}"
 
 def control_servo_18(bs):
-    """右眉尾控制"""
+    """右眉尾控制 - 对应browOuterUpRight(右眉尾上升)"""
+    # 右眉尾上升，舵机角度应向正方向运动
     value = bs.get("browOuterUpRight", 0) * SENSITIVITY["eyebrow_right_up"]
     min_angle, max_angle = servo_ranges[18]
-    angle = map_value(value, 0, 1, min_angle, max_angle)
+    # 注意：正上负下，所以眉尾上升应映射到正角度
+    angle = map_value(value, 0, 1, 0, max_angle)  # 从0到max_angle(正值)
     if DEBUG_MODE: debug_servo_angle(18, angle)
     return f"18,{int(angle)},{intervaltime}"
 
 def control_servo_19(bs):
-    """左眉头控制"""
+    """左眉头控制 - 对应browDownLeft(左眉头下降)"""
+    # 左眉头下降，舵机角度应向负方向运动
     value = bs.get("browDownLeft", 0) * SENSITIVITY["eyebrow_left_down"]
     min_angle, max_angle = servo_ranges[19]
-    angle = map_value(value, 0, 1, min_angle, max_angle)
+    # 注意：正上负下，所以眉头下降应映射到负角度
+    angle = map_value(value, 0, 1, 0, min_angle)  # 从0到min_angle(负值)
     if DEBUG_MODE: debug_servo_angle(19, angle)
     return f"19,{int(angle)},{intervaltime}"
 
 def control_servo_20(bs):
-    """左眉尾控制"""
+    """左眉尾控制 - 对应browOuterUpLeft(左眉尾上升)"""
+    # 左眉尾上升，舵机角度应向正方向运动
     value = bs.get("browOuterUpLeft", 0) * SENSITIVITY["eyebrow_left_up"]
     min_angle, max_angle = servo_ranges[20]
-    angle = map_value(value, 0, 1, min_angle, max_angle)
+    # 注意：正上负下，所以眉尾上升应映射到正角度
+    angle = map_value(value, 0, 1, 0, max_angle)  # 从0到max_angle(正值)
     if DEBUG_MODE: debug_servo_angle(20, angle)
     return f"20,{int(angle)},{intervaltime}"
 
@@ -292,6 +324,11 @@ def process_all_servos(blendshapes_dict):
     处理所有舵机控制的总入口函数
     返回: 舵机命令列表
     """
+    global blendshapes_smoothed
+        # 如果启用平滑，则对BlendShape值进行平滑处理
+    if SMOOTHING_ENABLED:
+        blendshapes_dict = smooth_blendshapes(blendshapes_dict)
+    
     commands = []
     
     # 打印头部
@@ -301,8 +338,12 @@ def process_all_servos(blendshapes_dict):
         print("="*80)
     
     # 调用每个舵机的控制函数
-    # for servo_id in range(1, 21): 
-    for servo_id in [1 ,6,11,12,13,14, 15, 16,0]:
+    # for servo_id in range(1, 21):  #全部
+    # for servo_id in [1,11,12,14,15,16,0]: #眼球，眼皮
+    # for servo_id in [6,13,0]: #左右嘴（下巴）
+    # for servo_id in [4,5,9,10,0]: # 上下颚?
+    for servo_id in [17,18,19,20,0]: #眉毛
+    # for servo_id in [2,3,7,8,0]: #脸颊 （牙后）
         try:
             # 获取舵机控制函数
             control_func = globals().get(f"control_servo_{servo_id}")

@@ -27,9 +27,9 @@ tools.py为映射和控制代码 config.py中修改灵敏度
 ## MediaPipe 52维面部运动因子对照表
 | 英文名称 | 中文名称 | 类别 |
 |---------|---------|------|
-| `browDownLeft` | 左眉下降 | 眉毛 |
-| `browDownRight` | 右眉下降 | 眉毛 |
-| `browInnerUp` | 眉心上升 | 眉毛 |
+| `browDownLeft` | 左眉头下降 | 眉毛 |
+| `browDownRight` | 右眉头下降 | 眉毛 |
+| `browInnerUp` | 蹙眉 | 眉毛 |
 | `browOuterUpLeft` | 左眉尾上升 | 眉毛 |
 | `browOuterUpRight` | 右眉尾上升 | 眉毛 |
 | `cheekPuff` | 鼓腮 | 脸颊 |

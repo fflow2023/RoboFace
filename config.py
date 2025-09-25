@@ -6,7 +6,6 @@ ip = '127.0.0.1'  # 示例IP（根据需要调整）
 
 port = 8888  # 示例端口（根据需要调整）
 
-
 # 模型路径
 MODEL_PATH = 'face_landmarker_v2_with_blendshapes.task'
 
@@ -14,9 +13,14 @@ MODEL_PATH = 'face_landmarker_v2_with_blendshapes.task'
 DEFAULT_IMG_PATH = 'tests/ZZ.jpg'      # 模式1默认测试图
 DEFAULT_VIDEO_PATH = 'tests/test_video.mp4'  # 模式3默认测试视频
 
+# 摄像头帧率
+FPS = 30
 # 窗口名称
-FPS = 10
 WIN_NAME = 'MediaPipe FaceLandmarker (' + str(FPS) + ' FPS)'
+
+# 时序平滑设置
+SMOOTHING_ENABLED = True  # 总开关，True启用平滑，False禁用
+SMOOTHING_ALPHA = 0.3    # 指数平滑系数，取值范围0.0-1.0，越小越平滑但响应变慢
 
 # 灵敏度设置
 SENSITIVITY = {
@@ -45,7 +49,12 @@ SENSITIVITY = {
     
     # 下颌控制 (预留)
     "jaw_open": 1.0,
-    "jaw_close": 1.0,
+    
+    #脸颊控制（牙后)  
+    "cheek_left_up": 1.0,
+    "cheek_left_forward": 1.0,
+    "cheek_right_up": 1.0,
+    "cheek_right_forward": 1.0,
 }
 
 
@@ -76,8 +85,8 @@ servo_ranges = {
 
 # ========== 52 维 BlendShape → 中文动作对照表 ==========
 BS_CN = {
-    "browDownLeft": "左眉下降", "browDownRight": "右眉下降",
-    "browInnerUp": "眉心上升", "browOuterUpLeft": "左眉尾上升", "browOuterUpRight": "右眉尾上升",
+    "browDownLeft": "左眉头下降", "browDownRight": "右眉头下降",
+    "browInnerUp": "蹙眉", "browOuterUpLeft": "左眉尾上升", "browOuterUpRight": "右眉尾上升",
     "cheekPuff": "鼓腮", "cheekSquintLeft": "左颊眯紧", "cheekSquintRight": "右颊眯紧",
     "eyeBlinkLeft": "左眼眨", "eyeBlinkRight": "右眼眨",
     "eyeLookDownLeft": "左眼向下", "eyeLookDownRight": "右眼向下",
